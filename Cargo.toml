@@ -1,0 +1,15 @@
+[package]
+name = "wgpu-learn"
+version = "0.1.0"
+edition = "2024"
+
+[[bin]]
+name = "wgpu-learn"
+path = "main.rs"
+
+[dependencies]
+env_logger = "0.11.8"
+log = "0.4.27"
+pollster = "0.4.0"
+wgpu = "24.0.3"
+winit = "0.30.9"
