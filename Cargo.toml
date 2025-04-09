@@ -7,9 +7,13 @@ edition = "2024"
 name = "wgpu-learn"
 path = "main.rs"
 
+[lib]
+crate-type = ["cdylib", "rlib"]
+path = "lib.rs"
+
 [dependencies]
 env_logger = "0.11.8"
 log = "0.4.27"
 pollster = "0.4.0"
 wgpu = "24.0.3"
-winit = "0.30.9"
+winit = {version = "0.29", features = ["rwh_05"] }
