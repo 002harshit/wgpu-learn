@@ -1,6 +1,5 @@
 #![allow(unused_macros)]
 
-use std::iter;
 use winit::{
     event::*,
     event_loop::EventLoop,
@@ -54,7 +53,10 @@ struct Game<'a> {
     config: wgpu::SurfaceConfiguration,
     size: winit::dpi::PhysicalSize<u32>,
     window: &'a Window,
-    bg : wgpu::Color
+    bg: wgpu::Color,
+    render_pipeline: wgpu::RenderPipeline,
+    another_pipeline: wgpu::RenderPipeline,
+    is_switched: bool,
 }
 
 impl<'a> Game<'a> {
@@ -110,6 +112,98 @@ impl<'a> Game<'a> {
             desired_maximum_frame_latency: 2,
         };
 
+        let shader = device.create_shader_module(wgpu::include_wgsl!("shader.wgsl"));
+
+        let layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+            label: Some("Layout"),
+            push_constant_ranges: &[],
+            bind_group_layouts: &[],
+        });
+
+        let render_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+            layout: Some(&layout),
+            label: Some("pipeline"),
+            vertex: wgpu::VertexState {
+                entry_point: Some("vs_main"),
+                module: &shader,
+                buffers: &[],
+                compilation_options: wgpu::PipelineCompilationOptions::default(),
+            },
+
+            fragment: Some(wgpu::FragmentState {
+                entry_point: Some("fs_main"),
+                module: &shader,
+                targets: &[Some(wgpu::ColorTargetState {
+                    format: config.format,
+                    blend: Some(wgpu::BlendState::REPLACE),
+                    write_mask: wgpu::ColorWrites::ALL,
+                })],
+                compilation_options: wgpu::PipelineCompilationOptions::default(),
+            }),
+            primitive: wgpu::PrimitiveState {
+                topology: wgpu::PrimitiveTopology::TriangleList,
+                strip_index_format: None,
+                front_face: wgpu::FrontFace::Ccw,
+                cull_mode: Some(wgpu::Face::Back),
+                polygon_mode: wgpu::PolygonMode::Fill,
+                unclipped_depth: false,
+                conservative: false,
+            },
+            multisample: wgpu::MultisampleState {
+                count: 1,
+                mask: !0,
+                alpha_to_coverage_enabled: false,
+            },
+            cache: None,
+            depth_stencil: None,
+            multiview: None,
+        });
+
+        let another_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+            layout: Some(&layout),
+            label: Some("pipeline"),
+            vertex: wgpu::VertexState {
+                entry_point: Some("vs_main"),
+                module: &shader,
+                buffers: &[],
+                compilation_options: wgpu::PipelineCompilationOptions::default(),
+            },
+
+            fragment: Some(wgpu::FragmentState {
+                entry_point: Some("fs_main2"),
+                module: &shader,
+                targets: &[Some(wgpu::ColorTargetState {
+                    format: config.format,
+                    blend: Some(wgpu::BlendState::REPLACE),
+                    write_mask: wgpu::ColorWrites::ALL,
+                })],
+                compilation_options: wgpu::PipelineCompilationOptions::default(),
+            }),
+            primitive: wgpu::PrimitiveState {
+                topology: wgpu::PrimitiveTopology::TriangleList,
+                strip_index_format: None,
+                front_face: wgpu::FrontFace::Ccw,
+                cull_mode: Some(wgpu::Face::Back),
+                polygon_mode: wgpu::PolygonMode::Fill,
+                unclipped_depth: false,
+                conservative: false,
+            },
+            multisample: wgpu::MultisampleState {
+                count: 1,
+                mask: !0,
+                alpha_to_coverage_enabled: false,
+            },
+            cache: None,
+            depth_stencil: None,
+            multiview: None,
+        });
+        let bg = wgpu::Color {
+            r: 0.01,
+            g: 0.01,
+            b: 0.01,
+            a: 1.0,
+        };
+
         Self {
             config,
             device,
@@ -117,10 +211,13 @@ impl<'a> Game<'a> {
             surf: surface,
             window,
             size,
-            bg: wgpu::Color{r:0.0,g:0.0,b:0.0,a:1.0}
+            bg,
+            render_pipeline,
+            another_pipeline,
+            is_switched: false,
         }
     }
-    
+
     fn window(&self) -> &Window {
         &self.window
     }
@@ -136,7 +233,13 @@ impl<'a> Game<'a> {
 
     #[allow(unused_variables)]
     fn input(&mut self, event: &WindowEvent) -> bool {
-        false
+        match event {
+            is_key_pressed!(KeyCode::Space) => {
+                self.is_switched = !self.is_switched;
+                true
+            }
+            _ => false,
+        }
     }
 
     fn update(&mut self) {}
@@ -154,7 +257,7 @@ impl<'a> Game<'a> {
             });
 
         {
-            let _render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+            let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("Render Pass"),
                 color_attachments: &[Some(wgpu::RenderPassColorAttachment {
                     view: &view,
@@ -168,8 +271,14 @@ impl<'a> Game<'a> {
                 occlusion_query_set: None,
                 timestamp_writes: None,
             });
+            if self.is_switched {
+                render_pass.set_pipeline(&self.render_pipeline);
+            } else {
+                render_pass.set_pipeline(&self.another_pipeline);
+            }
+            render_pass.draw(0..3, 0..1); // 3.
         }
-        self.queue.submit(iter::once(encoder.finish()));
+        self.queue.submit(std::iter::once(encoder.finish()));
         output.present();
         Ok(())
     }
@@ -194,18 +303,6 @@ pub async fn run() {
                         match event {
                             WindowEvent::CloseRequested | is_key_released!(KeyCode::Escape) => {
                                 control_flow.exit()
-                            }
-                            is_key_repeated!(KeyCode::KeyA) => {
-                                state.bg.g -= 1.0 / 60.0;
-                            }
-                            is_key_repeated!(KeyCode::KeyD) => {
-                                state.bg.g += 1.0 / 60.0;
-                            }
-                            is_key_repeated!(KeyCode::KeyW) => {
-                                state.bg.b -= 1.0 / 60.0;
-                            }
-                            is_key_repeated!(KeyCode::KeyS) => {
-                                state.bg.b += 1.0 / 60.0;
                             }
                             WindowEvent::Resized(physical_size) => {
                                 surface_configured = true;
